@@ -34,6 +34,9 @@ header {
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 2px 12px #0089ff12;
+  position: sticky;
+  top: 0;
+  z-index: 90;
 }
 .logo {
   font-weight: bold;
@@ -66,24 +69,24 @@ main {
   justify-content: center;
   margin: 0 auto;
   width: 100%;
-  max-width: 1100px;
+  max-width: 900px;
   gap: 2vw;
-  padding: 16px 0 32px 0;
+  padding: 10px 0 32px 0;
 }
-.sidebar, .profile-panel { 
-  min-width: 220px; 
-  max-width: 260px; 
-  margin-top: 30px;
+.feed, .profile-panel, .messages-pane {
+  flex: 1 1 0;
+  max-width: 620px;
+  min-width: 0;
+  margin: 0 auto;
 }
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 0 0 0 6px;
-}
-.feed {
-  flex: 1;
-  max-width: 540px;
+.feed, .messages-pane { display: flex; flex-direction: column; }
+.profile-panel {
+  background: var(--bg-alt);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1.5px solid var(--border);
+  margin-top: 12px;
+  padding: 18px 14px 14px 14px;
 }
 .card, .post-card {
   background: var(--card);
@@ -106,7 +109,7 @@ main {
   font-size: 1.1em;
 }
 .post-content {
-  font-size: 1.11rem;
+  font-size: 1.13rem;
   margin: 3px 0 5px 0;
 }
 .post-footer {
@@ -197,8 +200,7 @@ main {
 }
 .post-btn:hover { background: var(--accent2); transform: scale(1.04);}
 .messages-pane {
-  flex: 1; min-width: 0;
-  max-width: 480px;
+  min-width: 0;
   margin: 0 auto;
   display: flex; flex-direction: column;
 }
@@ -329,27 +331,19 @@ main {
   box-shadow: var(--shadow-btn);
 }
 .group-create-btn:hover { background: var(--accent2);}
-.profile-panel {
-  background: var(--bg-alt);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  border: 1.5px solid var(--border);
-  margin-top: 32px;
-  padding: 18px 15px;
-}
 .profile-name {
   font-weight: 700;
   color: var(--accent);
-  font-size: 1.24em;
+  font-size: 1.34em;
   margin-bottom: 4px;
 }
 .profile-user {
   color: #1da1f2;
   margin-bottom: 6px;
-  font-size: .97em;
+  font-size: 1.09em;
 }
 .profile-bio {
-  font-size: .99em;
+  font-size: 1.06em;
   color: #b8c9e8;
   margin-bottom: 7px;
 }
@@ -389,12 +383,12 @@ main {
   background: #ddd; color: #0089ff;
 }
 @media (max-width: 900px) {
-  .sidebar, .profile-panel { display: none; }
   main { flex-direction: column; padding: 0 3vw; gap: 0; }
-  .feed, .messages-pane { max-width: 99vw;}
+  .feed, .profile-panel, .messages-pane { max-width: 99vw; }
 }
 @media (max-width: 650px) {
   header { flex-direction: column; gap: 8px; align-items: flex-start;}
   .nav { margin: 0 0 0 14px;}
-  .feed, .messages-pane { max-width: 99vw;}
+  main { padding: 0 0; }
+  .feed, .profile-panel, .messages-pane { max-width: 100vw; }
 }

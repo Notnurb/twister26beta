@@ -5,9 +5,9 @@ let currentProfileView = null; // whose profile are we viewing?
 
 (async function initUser() {
   if (!currentUser) {
-    let u = prompt("Pick a username:").replace(/\W/g,'').slice(0,18);
+    let u = prompt("Pick a @ username:").replace(/\W/g,'').slice(0,18);
     if (!u) u = "user" + Math.floor(Math.random()*9999);
-    let n = prompt("Pick display name:").slice(0,20) || u;
+    let n = prompt("Pick a name:").slice(0,20) || u;
     currentUser = {username: u, display: n, bio: "", followers: [], following: [], groups: []};
     localStorage.setItem('twister2User', JSON.stringify(currentUser));
     await setDoc(doc(db, "users", u), {...currentUser}, {merge:true});

@@ -1,6 +1,7 @@
 const { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc } = window.firestore;
 
 let currentUser = JSON.parse(localStorage.getItem('twister2User') || "null");
+let currentProfileView = null; // whose profile are we viewing?
 
 (async function initUser() {
   if (!currentUser) {
@@ -15,12 +16,20 @@ let currentUser = JSON.parse(localStorage.getItem('twister2User') || "null");
   loadFeed();
   loadExplore();
   renderChats();
-  renderProfile(currentUser.username);
+  // Default to your own profile
+  currentProfileView = currentUser.username;
+  renderProfile(currentProfileView);
 })();
 
 function setupNav() {
   document.querySelectorAll('.nav-btn').forEach(btn=>{
-    btn.onclick=()=>switchPage(btn.dataset.page);
+    btn.onclick=()=>{
+      if (btn.dataset.page === "profile") {
+        currentProfileView = currentUser.username;
+        renderProfile(currentUser.username);
+      }
+      switchPage(btn.dataset.page);
+    };
   });
 }
 function switchPage(page) {
@@ -33,7 +42,7 @@ function switchPage(page) {
   if (page==="feed") loadFeed();
   if (page==="explore") loadExplore();
   if (page==="messages") renderChats();
-  if (page==="profile") renderProfile(currentUser.username);
+  if (page==="profile") renderProfile(currentProfileView);
 }
 
 document.getElementById('postBtn').onclick = async () => {
@@ -50,7 +59,7 @@ document.getElementById('postBtn').onclick = async () => {
   document.getElementById('postText').value = "";
   loadFeed();
   loadExplore();
-  renderProfile(currentUser.username);
+  renderProfile(currentProfileView);
 };
 
 // FEED
@@ -96,6 +105,7 @@ function createPostCard(post) {
     </div>
   `;
   div.querySelector('.user').onclick = ()=>{
+    currentProfileView = post.user;
     renderProfile(post.user);
     switchPage("profile");
   };
@@ -106,7 +116,7 @@ function createPostCard(post) {
     if (liked) newLikes = newLikes.filter(u=>u!==currentUser.username);
     else newLikes.push(currentUser.username);
     await updateDoc(docRef,{likes:newLikes});
-    loadFeed(); loadExplore(); renderProfile(currentUser.username);
+    loadFeed(); loadExplore(); renderProfile(currentProfileView);
   };
   // Comments
   const clist = div.querySelector('.comment-list');
@@ -128,7 +138,7 @@ function createPostCard(post) {
     await updateDoc(docRef, {comments: prevComments});
     input.value = '';
     renderComments(post, clist);
-    loadFeed(); loadExplore(); renderProfile(currentUser.username);
+    loadFeed(); loadExplore(); renderProfile(currentProfileView);
   };
   return div;
 }
@@ -147,12 +157,16 @@ function renderComments(post, el) {
   });
   el.querySelectorAll('.user').forEach(uEl=>{
     uEl.onclick=()=>{
-      renderProfile(uEl.innerText.replace("@",""));
+      currentProfileView = uEl.innerText.replace("@","");
+      renderProfile(currentProfileView);
       switchPage("profile");
     };
   });
 }
 async function renderProfile(username) {
+  // Remove any old chat section
+  const chatSectionOld = document.getElementById('profileExtra');
+  chatSectionOld.innerHTML = '';
   let userDoc = await getDoc(doc(db,"users",username));
   let userData = userDoc.exists()?userDoc.data():{username,display:username,bio:"",followers:[],following:[]};
   userData.username = username;
@@ -190,6 +204,7 @@ async function renderProfile(username) {
       await setDoc(doc(db,"users",userData.username), userData, {merge:true});
       renderProfile(userData.username);
     };
+    renderMyChatsAndGroups();
   } else {
     c.querySelector('#followBtn').onclick = async ()=>{
       let isF = (userData.followers||[]).includes(currentUser.username);
@@ -208,7 +223,64 @@ async function renderProfile(username) {
   list.innerHTML = '';
   snap.forEach(docSnap=>list.appendChild(createPostCard({...docSnap.data(),id:docSnap.id})));
 }
-// --- MESSAGES/DMs/GROUPS ---
+
+async function renderMyChatsAndGroups() {
+  const chatSection = document.getElementById('profileExtra');
+  // DMs
+  chatSection.innerHTML = `<h4 style="color:#00e0c5;margin-top:18px;margin-bottom:8px">Your Chats</h4>`;
+  const q = query(collection(db,"messages"), where("participants","array-contains",currentUser.username));
+  const snap = await getDocs(q);
+  const chats = {};
+  snap.forEach(docSnap=>{
+    const m = docSnap.data();
+    if (!m.group) {
+      const other = m.from===currentUser.username ? m.to : m.from;
+      if (!chats[other]) chats[other]=[];
+      chats[other].push(m);
+    }
+  });
+  Object.keys(chats).forEach(other=>{
+    let lastMsg = chats[other][chats[other].length-1];
+    const row = document.createElement('div');
+    row.className = 'chat-item';
+    row.innerHTML = `<span>@${other}</span> <span style="font-size:.96em;color:#1da1f2">${lastMsg.text.slice(0,24)}</span>`;
+    row.onclick=()=>openChat(other,false);
+    chatSection.appendChild(row);
+  });
+  // Groups
+  chatSection.innerHTML += `<h4 style="color:#00e0c5;margin-top:18px;margin-bottom:8px">Your Groups</h4>`;
+  const gsnap = await getDocs(collection(db,"groups"));
+  gsnap.forEach(docSnap=>{
+    const g = docSnap.data();
+    if ((g.members||[]).includes(currentUser.username)) {
+      const row = document.createElement('div');
+      row.className = 'chat-item';
+      row.innerHTML = `<span>${g.name}</span><span style="font-size:.93em;color:#1da1f2">${(g.last||"").slice(0,22)}</span>`;
+      row.onclick=()=>openChat(docSnap.id,true);
+      chatSection.appendChild(row);
+    }
+  });
+}
+// --- Chat logic and modal remain unchanged from earlier
+document.getElementById('createGroupBtn').onclick = ()=>{
+  document.getElementById('groupModal').style.display = "block";
+};
+document.getElementById('groupModalCancelBtn').onclick = ()=>{
+  document.getElementById('groupModal').style.display = "none";
+};
+document.getElementById('groupModalCreateBtn').onclick = async ()=>{
+  const name = document.getElementById('groupNameInput').value.trim();
+  const users = document.getElementById('groupUsersInput').value.trim().split(",").map(x=>x.trim()).filter(x=>x);
+  if (!name || users.length<1) return alert("Fill all fields.");
+  users.push(currentUser.username);
+  const docRef = await addDoc(collection(db,"groups"),{name, members:users, last:""});
+  document.getElementById('groupModal').style.display = "none";
+  openChat(docRef.id,true);
+  switchPage("messages");
+  document.getElementById('groupNameInput').value="";
+  document.getElementById('groupUsersInput').value="";
+};
+
 async function renderChats() {
   const chatList = document.getElementById('chatList');
   chatList.innerHTML = "<b>Direct Messages</b>";
@@ -247,7 +319,6 @@ async function renderChats() {
   });
   document.getElementById('chatMain').style.display = "none";
 }
-// --- Chat open ---
 async function openChat(who, isGroup) {
   document.getElementById('chatMain').style.display = "flex";
   let chatName = isGroup ? (await getDoc(doc(db,"groups",who))).data().name : `@${who}`;
@@ -302,22 +373,3 @@ async function openChat(who, isGroup) {
     renderChats();
   }
 }
-// --- GROUP MODAL ---
-document.getElementById('createGroupBtn').onclick = ()=>{
-  document.getElementById('groupModal').style.display = "block";
-};
-document.getElementById('groupModalCancelBtn').onclick = ()=>{
-  document.getElementById('groupModal').style.display = "none";
-};
-document.getElementById('groupModalCreateBtn').onclick = async ()=>{
-  const name = document.getElementById('groupNameInput').value.trim();
-  const users = document.getElementById('groupUsersInput').value.trim().split(",").map(x=>x.trim()).filter(x=>x);
-  if (!name || users.length<1) return alert("Fill all fields.");
-  users.push(currentUser.username);
-  const docRef = await addDoc(collection(db,"groups"),{name, members:users, last:""});
-  document.getElementById('groupModal').style.display = "none";
-  openChat(docRef.id,true);
-  switchPage("messages");
-  document.getElementById('groupNameInput').value="";
-  document.getElementById('groupUsersInput').value="";
-};

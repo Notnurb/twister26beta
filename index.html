@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Twister 2.0</title>
+  <title>Twister</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css">
-  <!-- Inter font for clean look -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,600&display=swap">
   <!-- Firebase Modular SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     window.firebaseConfig = {
       apiKey: "AIzaSyChTLDOW2M0AwfQcXYs1h50nnsGdSPw9B4",
       authDomain: "twister-production.firebaseapp.com",
@@ -22,13 +21,13 @@
     };
     const app = initializeApp(window.firebaseConfig);
     window.db = getFirestore(app);
-    window.firestore = { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc, arrayUnion };
+    window.firestore = { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc };
   </script>
   <script defer type="module" src="script.js"></script>
 </head>
 <body>
   <header>
-    <span class="logo">Twister 2.0</span>
+    <span class="logo">Twister</span>
     <nav class="nav">
       <button class="nav-btn active" data-page="feed">For You</button>
       <button class="nav-btn" data-page="explore">Explore</button>
@@ -48,38 +47,43 @@
       <h2 style="color:#00e0c5;margin-bottom:16px;">Trending</h2>
       <div id="exploreList"></div>
     </section>
+    <!-- Discord-style DMs -->
     <section class="messages-pane" id="messagesPage" style="display:none;">
-      <div class="messages-header">
-        <span>Chats & Groups</span>
-        <button class="group-create-btn" id="createGroupBtn" title="Create Group">+ Group</button>
-      </div>
-      <div class="chat-list" id="chatList"></div>
-      <div class="group-list" id="groupList"></div>
-      <div class="chat-main" id="chatMain" style="display:none;">
-        <div id="chatHeader"></div>
-        <div class="chat-thread" id="chatThread"></div>
-        <div class="chat-input-row">
-          <input class="chat-input" id="chatInput" maxlength="500" placeholder="Type your message...">
-          <button class="chat-send-btn" id="chatSendBtn">Send</button>
+      <div class="discord-dm-layout">
+        <div class="dm-sidebar" id="dmSidebar">
+          <div class="sidebar-header">
+            <span class="your-username" id="sidebarUsername"></span>
+            <button class="sidebar-create-group" id="createGroupBtn" title="Create Group">+</button>
+          </div>
+          <div class="dm-list" id="dmList"></div>
+          <div class="group-list" id="dmGroupList"></div>
         </div>
-        <button class="group-create-btn" id="closeChatBtn" style="margin-top:5px;">Close Chat</button>
+        <div class="dm-main-panel" id="dmMainPanel">
+          <div class="dm-header" id="dmHeader"></div>
+          <div class="dm-thread" id="dmThread"></div>
+          <div class="dm-input-row">
+            <input class="dm-input" id="dmInput" maxlength="1000" placeholder="Message...">
+            <button class="dm-send-btn" id="dmSendBtn">Send</button>
+          </div>
+        </div>
+      </div>
+      <!-- Group creation modal -->
+      <div id="groupModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999;background:#111aee20;backdrop-filter:blur(2px)">
+        <div class="group-create" style="max-width:360px;margin:100px auto 0 auto;">
+          <h3>Create Group</h3>
+          <input id="groupNameInput" placeholder="Group Name (required)">
+          <textarea id="groupUsersInput" rows="2" placeholder="Usernames to add, separated by commas"></textarea>
+          <button class="group-create-btn" id="groupModalCreateBtn">Create</button>
+          <button class="group-create-btn" id="groupModalCancelBtn" style="background:#ccc;color:#222;">Cancel</button>
+        </div>
       </div>
     </section>
-    <aside class="profile-panel" id="profilePanel" style="display:none;">
+    <section class="profile-panel" id="profilePanel" style="display:none;">
       <div id="profileContent"></div>
+      <div id="profileExtra"></div>
       <h3 style="color:#00e0c5;margin-top:16px;margin-bottom:8px" id="profilePostsTitle">Your Posts</h3>
       <div id="profilePosts"></div>
-    </aside>
+    </section>
   </main>
-  <!-- Group creation modal (hidden by default) -->
-  <div id="groupModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999;background:#111aee20;backdrop-filter:blur(2px)">
-    <div class="group-create" style="max-width:360px;margin:100px auto 0 auto;">
-      <h3>Create Group</h3>
-      <input id="groupNameInput" placeholder="Group Name (required)">
-      <textarea id="groupUsersInput" rows="2" placeholder="Usernames to add, separated by commas"></textarea>
-      <button class="group-create-btn" id="groupModalCreateBtn">Create</button>
-      <button class="group-create-btn" id="groupModalCancelBtn" style="background:#ccc;color:#222;">Cancel</button>
-    </div>
-  </div>
 </body>
 </html>

@@ -1,13 +1,14 @@
 const { collection, doc, getDoc, getDocs, setDoc, addDoc, query, where, orderBy, updateDoc } = window.firestore;
 
 let currentUser = JSON.parse(localStorage.getItem('twister2User') || "null");
-let currentProfileView = null; // whose profile are we viewing?
+let currentProfileView = null;
+let currentDM = null, currentIsGroup = false;
 
 (async function initUser() {
   if (!currentUser) {
-    let u = prompt("Pick a @ username:").replace(/\W/g,'').slice(0,18);
+    let u = prompt("Pick a username:").replace(/\W/g,'').slice(0,18);
     if (!u) u = "user" + Math.floor(Math.random()*9999);
-    let n = prompt("Pick a name:").slice(0,20) || u;
+    let n = prompt("Pick display name:").slice(0,20) || u;
     currentUser = {username: u, display: n, bio: "", followers: [], following: [], groups: []};
     localStorage.setItem('twister2User', JSON.stringify(currentUser));
     await setDoc(doc(db, "users", u), {...currentUser}, {merge:true});
@@ -16,7 +17,6 @@ let currentProfileView = null; // whose profile are we viewing?
   loadFeed();
   loadExplore();
   renderChats();
-  // Default to your own profile
   currentProfileView = currentUser.username;
   renderProfile(currentProfileView);
 })();
@@ -62,20 +62,17 @@ document.getElementById('postBtn').onclick = async () => {
   renderProfile(currentProfileView);
 };
 
-// FEED
 async function loadFeed() {
   const q = query(collection(db,"posts"), orderBy("created_at","desc"));
   const snap = await getDocs(q);
   let posts = [];
   snap.forEach(docSnap => posts.push({...docSnap.data(), id:docSnap.id}));
-  // Feed algo: blend by recency + likes + following
   posts.forEach(p=>p.rank = 1000000000 - new Date(p.created_at).getTime() + 8000*(p.likes?.length||0) + 12000*(p.comments?.length||0) + (currentUser.following||[]).includes(p.user)?7000:0);
   posts.sort((a,b)=>a.rank-b.rank);
   const feed = document.getElementById('feedList');
   feed.innerHTML = '';
   posts.slice(0,30).forEach(post => feed.appendChild(createPostCard(post)));
 }
-// EXPLORE
 async function loadExplore() {
   const q = query(collection(db,"posts"), orderBy("created_at","desc"));
   const snap = await getDocs(q);
@@ -109,7 +106,6 @@ function createPostCard(post) {
     renderProfile(post.user);
     switchPage("profile");
   };
-  // Like logic
   div.querySelector('.like-btn').onclick = async ()=>{
     const docRef = doc(db,"posts",post.id);
     let newLikes = post.likes?([...post.likes]):[];
@@ -118,7 +114,6 @@ function createPostCard(post) {
     await updateDoc(docRef,{likes:newLikes});
     loadFeed(); loadExplore(); renderProfile(currentProfileView);
   };
-  // Comments
   const clist = div.querySelector('.comment-list');
   const crow = div.querySelector('.comment-input-row');
   div.querySelector('.comments-btn').onclick=()=>{
@@ -164,7 +159,6 @@ function renderComments(post, el) {
   });
 }
 async function renderProfile(username) {
-  // Remove any old chat section
   const chatSectionOld = document.getElementById('profileExtra');
   chatSectionOld.innerHTML = '';
   let userDoc = await getDoc(doc(db,"users",username));
@@ -204,7 +198,6 @@ async function renderProfile(username) {
       await setDoc(doc(db,"users",userData.username), userData, {merge:true});
       renderProfile(userData.username);
     };
-    renderMyChatsAndGroups();
   } else {
     c.querySelector('#followBtn').onclick = async ()=>{
       let isF = (userData.followers||[]).includes(currentUser.username);
@@ -224,44 +217,7 @@ async function renderProfile(username) {
   snap.forEach(docSnap=>list.appendChild(createPostCard({...docSnap.data(),id:docSnap.id})));
 }
 
-async function renderMyChatsAndGroups() {
-  const chatSection = document.getElementById('profileExtra');
-  // DMs
-  chatSection.innerHTML = `<h4 style="color:#00e0c5;margin-top:18px;margin-bottom:8px">Your Chats</h4>`;
-  const q = query(collection(db,"messages"), where("participants","array-contains",currentUser.username));
-  const snap = await getDocs(q);
-  const chats = {};
-  snap.forEach(docSnap=>{
-    const m = docSnap.data();
-    if (!m.group) {
-      const other = m.from===currentUser.username ? m.to : m.from;
-      if (!chats[other]) chats[other]=[];
-      chats[other].push(m);
-    }
-  });
-  Object.keys(chats).forEach(other=>{
-    let lastMsg = chats[other][chats[other].length-1];
-    const row = document.createElement('div');
-    row.className = 'chat-item';
-    row.innerHTML = `<span>@${other}</span> <span style="font-size:.96em;color:#1da1f2">${lastMsg.text.slice(0,24)}</span>`;
-    row.onclick=()=>openChat(other,false);
-    chatSection.appendChild(row);
-  });
-  // Groups
-  chatSection.innerHTML += `<h4 style="color:#00e0c5;margin-top:18px;margin-bottom:8px">Your Groups</h4>`;
-  const gsnap = await getDocs(collection(db,"groups"));
-  gsnap.forEach(docSnap=>{
-    const g = docSnap.data();
-    if ((g.members||[]).includes(currentUser.username)) {
-      const row = document.createElement('div');
-      row.className = 'chat-item';
-      row.innerHTML = `<span>${g.name}</span><span style="font-size:.93em;color:#1da1f2">${(g.last||"").slice(0,22)}</span>`;
-      row.onclick=()=>openChat(docSnap.id,true);
-      chatSection.appendChild(row);
-    }
-  });
-}
-// --- Chat logic and modal remain unchanged from earlier
+/* Discord-style Messaging (DMs/Groups) */
 document.getElementById('createGroupBtn').onclick = ()=>{
   document.getElementById('groupModal').style.display = "block";
 };
@@ -282,8 +238,8 @@ document.getElementById('groupModalCreateBtn').onclick = async ()=>{
 };
 
 async function renderChats() {
-  const chatList = document.getElementById('chatList');
-  chatList.innerHTML = "<b>Direct Messages</b>";
+  document.getElementById("sidebarUsername").innerText = currentUser.display || currentUser.username;
+  // DMs
   const q = query(collection(db,"messages"), where("participants","array-contains",currentUser.username));
   const snap = await getDocs(q);
   const chats = {};
@@ -295,35 +251,42 @@ async function renderChats() {
       chats[other].push(m);
     }
   });
+  const dmList = document.getElementById('dmList');
+  dmList.innerHTML = '';
   Object.keys(chats).forEach(other=>{
     let lastMsg = chats[other][chats[other].length-1];
     const row = document.createElement('div');
-    row.className = 'chat-item';
-    row.innerHTML = `<span>@${other}</span> <span style="font-size:.96em;color:#1da1f2">${lastMsg.text.slice(0,24)}</span>`;
+    row.className = 'chat-item' + (currentDM===other&&currentIsGroup===false?' active':'');
+    row.innerHTML = `<span>@${other}</span> <span style="font-size:.96em;color:#1da1f2">${lastMsg.text.slice(0,20)}</span>`;
     row.onclick=()=>openChat(other,false);
-    chatList.appendChild(row);
+    dmList.appendChild(row);
   });
   // Groups
-  const groupList = document.getElementById('groupList');
-  groupList.innerHTML = "<b>Groups</b>";
   const gsnap = await getDocs(collection(db,"groups"));
+  const dmGroupList = document.getElementById('dmGroupList');
+  dmGroupList.innerHTML = '';
   gsnap.forEach(docSnap=>{
     const g = docSnap.data();
     if ((g.members||[]).includes(currentUser.username)) {
       const row = document.createElement('div');
-      row.className = 'chat-item';
-      row.innerHTML = `<span>${g.name}</span><span style="font-size:.93em;color:#1da1f2">${(g.last||"").slice(0,22)}</span>`;
+      row.className = 'chat-item' + (currentDM===docSnap.id&&currentIsGroup===true?' active':'');
+      row.innerHTML = `<span>${g.name}</span><span style="font-size:.93em;color:#1da1f2">${(g.last||"").slice(0,18)}</span>`;
       row.onclick=()=>openChat(docSnap.id,true);
-      groupList.appendChild(row);
+      dmGroupList.appendChild(row);
     }
   });
-  document.getElementById('chatMain').style.display = "none";
+  if (currentDM!==null) openChat(currentDM, currentIsGroup);
+  else {
+    document.getElementById('dmHeader').innerHTML = '';
+    document.getElementById('dmThread').innerHTML = '<div style="color:#555;padding:30px 0;font-size:1.15em;text-align:center">Select a chat or group</div>';
+  }
 }
 async function openChat(who, isGroup) {
-  document.getElementById('chatMain').style.display = "flex";
+  currentDM = who;
+  currentIsGroup = isGroup;
   let chatName = isGroup ? (await getDoc(doc(db,"groups",who))).data().name : `@${who}`;
-  document.getElementById('chatHeader').innerHTML = `<b>${chatName}</b>`;
-  const thread = document.getElementById('chatThread');
+  document.getElementById('dmHeader').innerHTML = `<b>${chatName}</b>`;
+  const thread = document.getElementById('dmThread');
   thread.innerHTML = '';
   let msgs = [];
   if (isGroup) {
@@ -339,9 +302,9 @@ async function openChat(who, isGroup) {
   msgs.sort((a,b)=>(a.time||0)-(b.time||0));
   msgs.forEach(msg=>{
     const row = document.createElement('div');
-    row.className = msg.from===currentUser.username?'bubble-row bubble-me':'bubble-row bubble-you';
+    row.className = (msg.from===currentUser.username?'dm-bubble-row dm-bubble-me':'dm-bubble-row dm-bubble-you');
     row.innerHTML = `
-      <div class="bubble${msg.from===currentUser.username?' mine':''}">
+      <div class="dm-bubble${msg.from===currentUser.username?' mine':''}">
         ${isGroup?`<span class="chat-user">${msg.from}</span>`:""}
         ${msg.text}
       </div>
@@ -349,8 +312,8 @@ async function openChat(who, isGroup) {
     thread.appendChild(row);
   });
   thread.scrollTop = thread.scrollHeight;
-  document.getElementById('chatSendBtn').onclick = async ()=>{
-    const val = document.getElementById('chatInput').value.trim();
+  document.getElementById('dmSendBtn').onclick = async ()=>{
+    const val = document.getElementById('dmInput').value.trim();
     if (!val) return;
     if (isGroup) {
       await addDoc(collection(db,"messages"),{
@@ -365,11 +328,8 @@ async function openChat(who, isGroup) {
         text: val, time: Date.now()
       });
     }
-    document.getElementById('chatInput').value = "";
+    document.getElementById('dmInput').value = "";
     openChat(who, isGroup);
-  };
-  document.getElementById('closeChatBtn').onclick = ()=>{
-    document.getElementById('chatMain').style.display = "none";
     renderChats();
-  }
+  };
 }
